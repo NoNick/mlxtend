@@ -141,7 +141,7 @@ class StackingCVClassifier(BaseEstimator, ClassifierMixin, TransformerMixin):
         self.store_train_meta_features = store_train_meta_features
         self.use_clones = use_clones
 
-    def fit(self, X, y, groups=None, sample_weight=None, fit_params=None):
+    def fit(self, X, y, groups=None, **fit_params):
         """ Fit ensemble classifers and the meta-classifier.
 
         Parameters
@@ -212,16 +212,7 @@ class StackingCVClassifier(BaseEstimator, ClassifierMixin, TransformerMixin):
                           ((num + 1), final_cv.get_n_splits()))
 
                 try:
-                    if sample_weight is not None and fit_params is not None:
-                        model.fit(X[train_index], y[train_index],
-                                  sample_weight=sample_weight[train_index], fit_params=fit_params)
-                    elif sample_weight is not None:
-                        model.fit(X[train_index], y[train_index],
-                                  sample_weight=sample_weight[train_index])
-                    elif fit_params is not None:
-                        model.fit(X[train_index], y[train_index], fit_params=fit_params)
-                    else:
-                        model.fit(X[train_index], y[train_index])
+                    self._fit_model(model, X[train_index], y[train_index], **fit_params)
 
                 except TypeError as e:
 
@@ -295,14 +286,7 @@ class StackingCVClassifier(BaseEstimator, ClassifierMixin, TransformerMixin):
 
         # Fit the base models correctly this time using ALL the training set
         for model in self.clfs_:
-            if sample_weight is not None and fit_params is not None:
-                model.fit(X, y, sample_weight=sample_weight, fit_params=fit_params)
-            elif sample_weight is not None:
-                model.fit(X, y, sample_weight=sample_weight)
-            elif fit_params is not None:
-                model.fit(X, y, fit_params=fit_params)
-            else:
-                model.fit(X, y)
+            self._fit_model(model, X, y, **fit_params)
 
         # Fit the secondary model
         if not self.use_features_in_secondary:
@@ -320,6 +304,16 @@ class StackingCVClassifier(BaseEstimator, ClassifierMixin, TransformerMixin):
                                sample_weight=sample_weight)
 
         return self
+
+    # fails if the model is not a pipeline with two steps
+    def _fit_model(self, model, X, y, **params):
+        estimatorName = model.steps[1][0]
+        modelParams = {}
+        for name, val in params.items():
+            if estimatorName in name:
+                modelParams[name] = val
+
+        model.fit(X, y, **modelParams)
 
     def get_params(self, deep=True):
         """Return estimator parameter names for GridSearch support."""
